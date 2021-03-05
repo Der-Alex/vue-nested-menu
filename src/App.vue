@@ -4,96 +4,43 @@
       <h2>Sidebar</h2>
       <hr />
       <div class="sidebar__container">
-        <div class="nav-item" @click="prev('main')">
-          &lt; Back | Current Item {{ currentSelectedItem }}
+        <div class="nav-item" v-if="currentBackId" @click="prev(currentBackId)">
+          &lt; Back to {{ currentBackId }}
         </div>
-
         <hr />
 
-        <!--        <transition-group
-          :name="slideAnimation"
-          mode="in-out"
-          tag="div"
-          class="sidebar__content"
-        >
-          <template v-if="allDone">
-            <item-group
-              v-if="currentItem === getMainListKey"
-              :key="getMainListKey"
-              :key-id="getMainListKey"
-              :list="mainList"
-              :nav="menu"
-              :new-list="mainList"
-              @slide="slide"
-            />
-            <template v-for="key in getChildListKeys">
-              <item-group
-                v-if="currentItem === key"
-                :key="key"
-                :key-id="key"
-                :list="childList"
-                :nav="menu"
-                :new-list="mainList"
-                @slide="slide"
-              />
-            </template>
-            <component
-              v-for="(comp, index) in myComponents"
-              :is="comp.instance"
-              v-bind="comp.props"
-              :key="index"
-            />
-          </template>
-        </transition-group>-->
-
-        <!--        <transition-group
-          :name="slideAnimation"
-          mode="in-out"
-          tag="div"
-          class="sidebar__content"
-        >
-          <div v-if="currentItem === 'A'" class="item-group" key="A">
-            <div class="nav-item" @click="next('A-A')">Item A</div>
-            <div class="nav-item" @click="next('A-B')">Item B</div>
-            <div class="nav-item" @click="next('A-C')">Item C</div>
-          </div>
-
-          <div v-if="currentItem === 'A-A'" class="item-group" key="A-A">
-            <div class="nav-item">Item A-1</div>
-            <div class="nav-item">Item A-2</div>
-            <div class="nav-item">Item A-3</div>
-          </div>
-          <div v-if="currentItem === 'A-B'" class="item-group" key="A-B">
-            <div class="nav-item">Item B-1</div>
-            <div class="nav-item">Item B-2</div>
-            <div class="nav-item">Item B-3</div>
-          </div>
-          <div v-if="currentItem === 'A-C'" class="item-group" key="A-C">
-            <div class="nav-item">Item C-1</div>
-            <div class="nav-item">Item C-2</div>
-            <div class="nav-item">Item C-3</div>
-          </div>
-        </transition-group>-->
-
         <template v-if="allDone">
-          <item-group
-            v-if="currentItem === getMainListKey"
-            :key="getMainListKey"
-            :key-id="getMainListKey"
-            :list="mainList"
-            :nav="menu"
-            :new-list="mainList"
-            @slide="slide"
-          />
+          <transition-group
+            :name="'slide-right'"
+            mode="in-out"
+            tag="div"
+            class="sidebar__content"
+          >
+            <div class="item-group" v-if="currentList" :key="currentList[0].id">
+              <template v-for="item in currentList">
+                <div
+                  class="nav-item"
+                  v-if="item.hasChildren"
+                  @click="
+                    slide({ animation: 'slide-right', currentItem: item })
+                  "
+                  :key="item.id"
+                >
+                  {{ item.title }} &gt;&gt;
+                </div>
+                <div class="nav-item" v-else :key="item.id">
+                  {{ item.title }}
+                </div>
+              </template>
+            </div>
+          </transition-group>
         </template>
       </div>
     </div>
   </div>
 </template>
 <script lang="ts">
-import Vue, { VueConstructor } from "vue";
-import ItemGroup from "@/components/ItemGroup.vue";
-import { CombinedVueInstance } from "vue/types/vue";
+import Vue from "vue";
 
 interface Nav {
   id: string;
@@ -101,14 +48,22 @@ interface Nav {
   children?: Nav[];
 }
 
-interface List {
-  [key: string]: ListItem[];
-}
-
-interface ListItem {
+interface NavItem {
   id: string;
   title: string;
+  parent: string;
+}
+
+interface SimpleNavItem extends NavItem {
   hasChildren: boolean;
+}
+
+interface SimpleNav extends NavItem {
+  children: SimpleNavItem[];
+}
+
+interface FullNavItem extends NavItem {
+  children?: FullNavItem[];
 }
 
 const menu: Nav[] = [
@@ -182,119 +137,114 @@ const menu: Nav[] = [
 
 export default Vue.extend({
   name: "App",
-  components: {
-    ItemGroup
-  },
   data() {
-    const mainList: List = {};
-    const childList: List = {};
-    const currentChildNav: Nav[] = [];
-    const myComponents: {
-      instance: CombinedVueInstance<any, any, any, any, any>;
-      props: { keyId: string; list: List; nav: Nav[]; newList: List };
-    }[] = [];
     return {
-      currentItem: "A",
-      slideAnimation: "slide-right",
-      menu,
-      mainList,
-      childList,
-      currentChildNav,
+      slideAnimation: "slide-left",
       allDone: false,
-      myComponents,
-      currentSelectedItem: ""
+      menu,
+      currentList: [] as SimpleNavItem[],
+      fullList: [] as FullNavItem[],
+      currentBackId: null as string | null,
+      lastClickedItem: {} as SimpleNavItem
     };
   },
-  computed: {
-    getMainListKey(): string {
-      console.log("getMainListKey", Object.keys(this.mainList)[0]);
-      return Object.keys(this.mainList)[0];
-    },
-    getChildListKeys(): string[] {
-      console.log("getChildListKeys", Object.keys(this.childList));
-      return Object.keys(this.childList);
-    }
-  },
   methods: {
-    slide(config: { animation: string; currentItem: string }) {
-      console.log("slide called");
-      //this.slideAnimation = config.animation;
-      this.currentSelectedItem = config.currentItem;
+    slide(config: { animation: string; currentItem: SimpleNavItem }) {
+      this.lastClickedItem = config.currentItem;
+      const navItem = this.findNavItemById(config.currentItem.id, this.menu);
+      if (navItem && navItem.children) {
+        this.currentList = this.getCurrentList(navItem.children, navItem.id);
+        this.currentBackId = config.currentItem.parent;
+      }
     },
     next(item: string): void {
-      this.slideAnimation = "slide-left";
-      this.currentItem = item;
+      this.slideAnimation = "slide-right";
     },
     prev(item: string): void {
-      this.slideAnimation = "slide-left";
-      this.currentSelectedItem = item;
-      this.currentItem = 'main';
-    },
-    createList(list: List, nav: Nav[], key = "main") {
-      const obj: List = {
-        [key]: []
-      };
-      for (const item of nav) {
-        obj[key].push({
-          id: item.id,
-          title: item.title,
-          hasChildren: !!item.children && item.children.length > 0
-        });
+      const navItem = this.findNavItemById(item, this.menu);
+      if (navItem && navItem.children) {
+        this.currentList = this.getCurrentList(navItem.children, navItem.id);
+      } else {
+        this.currentList = this.getCurrentList(this.menu, "main");
       }
-      Object.assign(list, obj);
-    },
-    listHasKeys(list: List): boolean {
-      console.log("listHasKeys", Object.keys(list).length);
-      return Object.keys(list).length > 0;
-    },
-    itemHasChildren(item: Nav): boolean {
-      console.log(
-        "itemHasChildren",
-        !!item.children && item.children.length > 0
-      );
+      if (this.lastClickedItem && this.lastClickedItem.parent) {
+        this.currentBackId = this.lastClickedItem.parent;
+      }
 
-      return !!item.children && item.children.length > 0;
+      this.currentBackId = this.findParent(this.fullList, item);
     },
-    findItemByKey(key: string, list: Nav[]): Nav | null {
+
+    createFullNavList(nav: Nav[], parent: string): FullNavItem[] {
+      const result: FullNavItem[] = [];
+      for (const navItem of nav) {
+        const item: FullNavItem = {
+          id: navItem.id,
+          title: navItem.title,
+          parent
+        };
+        if (navItem.children && navItem.children.length > 0) {
+          item.children = this.createFullNavList(navItem.children, navItem.id);
+        }
+        result.push(item);
+      }
+      return result;
+    },
+    findNavItemById(id: string, nav: Nav[]): Nav | null {
       let result: Nav | null = null;
-      for (const item of list) {
-        if (item.id === key) {
+      for (const item of nav) {
+        if (item.id === id) {
           result = item;
           break;
         } else {
-          if (this.itemHasChildren(item)) {
-            result = this.findItemByKey(key, item.children as Nav[]);
+          if (item.children && item.children.length > 0) {
+            result = this.findNavItemById(id, item.children as Nav[]);
             if (result) {
               break;
             }
           }
         }
       }
-      console.log("findItemByKey", result);
       return result;
     },
-    getCurrentChildren(key: string, list: Nav[]): Nav[] {
-      const item: Nav | null = this.findItemByKey(key, list);
-      if (item && item.children) {
-        return item.children;
+    getCurrentList(nav: Nav[], parent: string): SimpleNavItem[] {
+      const result: SimpleNavItem[] = [];
+      let hasChildren = false;
+      for (const navItem of nav) {
+        if (navItem.children && navItem.children.length > 0) {
+          hasChildren = true;
+        }
+        result.push({
+          id: navItem.id,
+          title: navItem.title,
+          hasChildren,
+          parent
+        });
       }
-      return [];
+      return result;
     },
-    render(list: List, nav: Nav[], key: string) {
-      this.createList(list, this.getCurrentChildren(key, nav), key);
-      this.next(key);
+    findParent(nav: FullNavItem[], id: string): string | null {
+      console.log("id", id);
+      let parent: string | null = null;
+      for (const item of nav) {
+        console.log("item: ", item);
+        if (item.id === id) {
+          console.log("item parent ", item.parent);
+          if (parent === null) {
+            parent = "main";
+          }
+          break;
+        } else {
+          if (item.children && item.children.length > 0) {
+            parent = this.findParent(item.children, id);
+          }
+        }
+      }
+      return parent;
     }
   },
   mounted() {
-    this.createList(this.mainList, this.menu);
-    for (const item of menu) {
-      if (item.children && item.children.length > 0) {
-        this.createList(this.childList, item.children, item.id);
-      }
-    }
-    console.log(this.mainList);
-    console.log(this.childList, Object.keys(this.childList));
-    this.currentItem = this.getMainListKey;
+    this.fullList = this.createFullNavList(this.menu, "main");
+    this.currentList = this.getCurrentList(this.menu, "main");
     this.allDone = true;
   }
 });
