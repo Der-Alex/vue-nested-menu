@@ -11,7 +11,7 @@
 
         <template v-if="allDone">
           <transition-group
-            :name="'slide-right'"
+            :name="slideAnimation"
             mode="in-out"
             tag="div"
             class="sidebar__content"
@@ -145,11 +145,13 @@ export default Vue.extend({
       currentList: [] as SimpleNavItem[],
       fullList: [] as FullNavItem[],
       currentBackId: null as string | null,
-      lastClickedItem: {} as SimpleNavItem
+      lastClickedItem: {} as SimpleNavItem,
+      defaultParentName: "main"
     };
   },
   methods: {
     slide(config: { animation: string; currentItem: SimpleNavItem }) {
+      this.slideAnimation = config.animation;
       this.lastClickedItem = config.currentItem;
       const navItem = this.findNavItemById(config.currentItem.id, this.menu);
       if (navItem && navItem.children) {
@@ -157,20 +159,20 @@ export default Vue.extend({
         this.currentBackId = config.currentItem.parent;
       }
     },
-    next(item: string): void {
-      this.slideAnimation = "slide-right";
-    },
     prev(item: string): void {
+      this.slideAnimation = "slide-left";
       const navItem = this.findNavItemById(item, this.menu);
       if (navItem && navItem.children) {
         this.currentList = this.getCurrentList(navItem.children, navItem.id);
       } else {
-        this.currentList = this.getCurrentList(this.menu, "main");
+        this.currentList = this.getCurrentList(
+          this.menu,
+          this.defaultParentName
+        );
       }
       if (this.lastClickedItem && this.lastClickedItem.parent) {
         this.currentBackId = this.lastClickedItem.parent;
       }
-
       this.currentBackId = this.findParent(this.fullList, item);
     },
 
@@ -230,7 +232,7 @@ export default Vue.extend({
         if (item.id === id) {
           console.log("item parent ", item.parent);
           if (parent === null) {
-            parent = "main";
+            parent = this.defaultParentName;
           }
           break;
         } else {
@@ -243,8 +245,8 @@ export default Vue.extend({
     }
   },
   mounted() {
-    this.fullList = this.createFullNavList(this.menu, "main");
-    this.currentList = this.getCurrentList(this.menu, "main");
+    this.fullList = this.createFullNavList(this.menu, this.defaultParentName);
+    this.currentList = this.getCurrentList(this.menu, this.defaultParentName);
     this.allDone = true;
   }
 });
@@ -276,24 +278,10 @@ body {
   &__content {
     position: relative;
     width: 100%;
-    //overflow: hidden;
     height: 100%;
-    //display: flex;
-    //flex-direction: row;
-    //align-items: flex-start;
   }
 
-  .nav-level {
-    flex: 1 0 100%;
-    //transform: translateX(0);
-  }
-  .nav-link,
-  .nav-items {
-    flex: 1 0 100%;
-    //transform: translateX(0);
-  }
   .item-group {
-    //flex: 1 0 100%;
     position: absolute;
     width: 100%;
     height: 100%;
@@ -312,7 +300,6 @@ body {
 .slide-left-leave-active {
   animation: slide-out-left $time;
 }
-
 .slide-right-enter-active {
   animation: slide-in-right $time;
 }
@@ -322,10 +309,10 @@ body {
 
 @keyframes slide-in-left {
   0% {
-    transform: translate3d(0, 0, 0);
+    transform: translate3d(100%, 0, 0);
   }
   100% {
-    transform: translate3d(-100%, 0, 0);
+    transform: translate3d(0%, 0, 0);
   }
 }
 
